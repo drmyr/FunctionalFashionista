@@ -19,8 +19,6 @@ object Monad extends App {
   abstract class Bouquet {
     def flatMap(f: Rose => Bouquet): Bouquet
 
-    def apply(rose: Rose): Bouquet
-
     def size(): Int
   }
 
@@ -43,8 +41,6 @@ object Monad extends App {
       f(rose)
     }
 
-    def apply(rose: Rose): Bouquet = new BouquetImpl(rose, this)
-
     // Correctly .size() should be O(1), but for the purposes of this example O(n) is acceptable.
     def size(): Int = {
       1 + other.size()
@@ -54,10 +50,15 @@ object Monad extends App {
       s"rose $rose bouquet $other"
     }
 
+    override def hashCode(): Int = super.hashCode()
+
     override def equals(obj: Any): Boolean = {
-      val asBouquet = obj.asInstanceOf[BouquetImpl]
-      asBouquet.rose.equals(rose) && asBouquet.other.equals(other)
+      obj.isInstanceOf[BouquetImpl] && {
+        val asBouquet = obj.asInstanceOf[BouquetImpl]
+        asBouquet.rose.equals(rose) && asBouquet.other.equals(other)
+      }
     }
+
   }
 
 
@@ -66,12 +67,12 @@ object Monad extends App {
   val roseToBouquet = (x: Rose) => BouquetImpl(x)
   println(BouquetImpl(rose).flatMap(roseToBouquet))
   println(roseToBouquet.apply(rose))
-  assert(BouquetImpl(rose).flatMap(roseToBouquet).equals(roseToBouquet.apply(rose)))
+  assert(BouquetImpl(rose).flatMap(roseToBouquet) == (roseToBouquet.apply(rose)))
 
   println("right identity")
   val bouquet = BouquetImpl(rose)
   println(bouquet.flatMap((rose: Rose) => BouquetImpl(rose)).equals(bouquet))
-  assert(bouquet.flatMap((rose: Rose) => BouquetImpl(rose)).equals(bouquet))
+  assert(bouquet.flatMap((rose: Rose) => BouquetImpl(rose)) == (bouquet))
 
   println("associativity")
   val rose2 = Rose(2)
@@ -88,6 +89,6 @@ object Monad extends App {
   val bouquet7 = BouquetImpl(rose7)
   println(bouquet7.flatMap(f).flatMap(g))
   println(bouquet7.flatMap(rose => f(rose).flatMap(g)))
-  assert(bouquet7.flatMap(f).flatMap(g).equals(bouquet7.flatMap(rose => f(rose).flatMap(g))))
-  assert(bouquet7.flatMap(f).flatMap(g).equals(f(rose7).flatMap(g)))
+  assert(bouquet7.flatMap(f).flatMap(g) == bouquet7.flatMap(rose => f(rose).flatMap(g)))
+  assert(bouquet7.flatMap(f).flatMap(g) == f(rose7).flatMap(g))
 }

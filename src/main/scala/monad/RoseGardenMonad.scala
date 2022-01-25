@@ -1,6 +1,6 @@
 package monad
 
-import monad.Monad.{Bouquet, BouquetImpl, Rose}
+import monad.Monad.{Bouquet, BouquetImpl, EmptyBouquet, Rose}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -39,58 +39,59 @@ object RoseGardenMonad extends App {
    * So return day 4.
    */
   def daysToBouquet(bloomDays: Array[Int], minFlowerPerBouquet: Int, minBouquets: Int): Int = {
+    import scala.collection.mutable.PriorityQueue
     if(bloomDays.length < (minBouquets * minFlowerPerBouquet)) return -1
     if(bloomDays.length < 2) return bloomDays(0)
 
-    def combine(index: Int, direction: Int, mapAndBouquets: (mutable.Map[Int, Bouquet], mutable.Set[Bouquet])): Unit = {
-      val dir = index + direction
-      val bloom = bloomDays(dir)
-      val thisDayBouquet = mapAndBouquets._1.getOrElse(index, BouquetImpl(Rose(bloomDays(index))))
+    def wrapBouquet(index: Int, direction: Int, monadMap: Map[Int, Bouquet]): Map[Int, Bouquet] = {
+      val neighborIndex = index + direction
+      val neighborBloomDay = bloomDays(neighborIndex)
+      val thisDayBouquet = monadMap.getOrElse(index, BouquetImpl(Rose(bloomDays(index))))
       val merge = thisDayBouquet.flatMap(rose => {
-        val neighbor = mapAndBouquets._1.getOrElse(dir, BouquetImpl(Rose(bloom)))
-        if(thisDayBouquet.size() < minFlowerPerBouquet && neighbor.size() < minFlowerPerBouquet && rose.day >= bloom) {
-          BouquetImpl(rose, neighbor)
+        val neighborBouquet = monadMap.getOrElse(neighborIndex, BouquetImpl(Rose(neighborBloomDay)))
+        if(thisDayBouquet.size() < minFlowerPerBouquet && neighborBouquet.size() < minFlowerPerBouquet && rose.day >= neighborBloomDay) {
+          BouquetImpl(rose, neighborBouquet)
         } else {
           thisDayBouquet
         }
       })
 
-      mapAndBouquets._1.put(index, merge)
-
-      if(merge.size() > thisDayBouquet.size()) {
-        mapAndBouquets._1.put(dir, merge)
-      }
-      if(merge.size() == minFlowerPerBouquet) {
-        mapAndBouquets._2.add(merge)
-      }
+      monadMap + (index -> merge) + (if merge.size() > thisDayBouquet.size() then neighborIndex -> merge else -1 -> EmptyBouquet)
     }
 
-    import scala.collection.mutable.PriorityQueue
+    // Because .equals() of the these Bouquet monads would return true for all bouquets with the same rose(es)
+    // we cannot move the Bouquets into a set and then take the size of the set. Instead, we have to count the number
+    // of distinct Bouquet references that we have. For that, we have to count distinct hashcodes.
+    val countBouquets: Iterable[Bouquet] => Int = _.filter(_.size() >= minFlowerPerBouquet).groupBy(_.hashCode()).keySet.size
+
     @tailrec
-    def daysToBouquetRec(heap: mutable.PriorityQueue[(Int, Int)], mapAndBouquets: (mutable.Map[Int, Bouquet], mutable.Set[Bouquet])): Int = {
+    def daysToBouquetRec(heap: mutable.PriorityQueue[(Int, Int)], monadMap: Map[Int, Bouquet]): Int = {
       if(heap.nonEmpty) {
         val dayWithIndex = heap.dequeue()
         val day = dayWithIndex(0)
         val index = dayWithIndex(1)
-        if(index == 0) {
-          combine(index, 1, mapAndBouquets)
+        val updatedMonadMap = if(index == 0) {
+          wrapBouquet(index, 1, monadMap)
         } else if(index == bloomDays.length - 1) {
-          combine(index, -1, mapAndBouquets)
+          wrapBouquet(index, -1, monadMap)
         } else {
-          combine(index, 1, mapAndBouquets)
-          combine(index, -1, mapAndBouquets)
+          wrapBouquet(index, -1, wrapBouquet(index, 1, monadMap))
         }
-        if(mapAndBouquets._2.size == minBouquets) {
+
+        if(countBouquets(updatedMonadMap.values) >= minBouquets) {
           day
         } else {
-          daysToBouquetRec(heap, mapAndBouquets)
+          daysToBouquetRec(heap, updatedMonadMap)
         }
       } else -1
     }
     val heap = new mutable.PriorityQueue[(Int, Int)]()(Ordering.by[(Int, Int), Int](x => x(0)).reverse).addAll(bloomDays.zipWithIndex)
-    daysToBouquetRec(heap, (mutable.Map.empty[Int, Bouquet], mutable.Set.empty[Bouquet]))
+    daysToBouquetRec(heap, Map.empty[Int, Bouquet])
   }
 
+  println(daysToBouquet(Array(1, 2, 4, 9, 3, 4, 1), 2, 2))
+  println(daysToBouquet(Array(1, 10, 3, 10, 2), 3, 2))
+  println(daysToBouquet(Array(7, 7, 7, 12, 7, 7), 2, 3))
   assert(4 == daysToBouquet(Array(1, 2, 4, 9, 3, 4, 1), 2, 2))
   assert(-1 == daysToBouquet(Array(1, 10, 3, 10, 2), 3, 2))
   assert(12 == daysToBouquet(Array(7, 7, 7, 12, 7, 7), 2, 3))
